@@ -1,8 +1,18 @@
 # Task Tracker API
 
-A small REST API to manage tasks, backed by a real SQLite database.
+A small REST API to manage tasks, backed by a real SQLite database, with a
+Gradio web UI.
 
-**Stack:** FastAPI · SQLModel · SQLite · Uvicorn
+**Stack:** FastAPI · SQLModel · SQLite · Gradio · Uvicorn
+
+## Architecture
+
+![architecture](docs/architecture.svg)
+
+The Gradio UI is a separate process that talks to the FastAPI service **over
+HTTP** (via `httpx`) — it never touches the database directly. FastAPI handles
+validation and routing; SQLModel maps Python objects to SQL; the data lives in
+`tasks.db`, which you can inspect independently in DBeaver.
 
 ## Features
 
@@ -12,19 +22,34 @@ A small REST API to manage tasks, backed by a real SQLite database.
 - Database session via dependency injection (`Depends(get_session)`)
 - Proper error handling: `404` for missing tasks, automatic `422` for invalid input
 - Auto-generated Swagger UI at `/docs`
+- Gradio UI for creating / listing / updating / deleting tasks
+
+## Project structure
+
+```
+app/
+  __init__.py
+  database.py   engine, get_session (DI), create_db_and_tables, SQL_ECHO toggle
+  models.py     Task table model + Status/Priority enums
+  schemas.py    TaskCreate / TaskUpdate / TaskResponse
+  main.py       FastAPI app, lifespan, the 5 CRUD routes
+ui.py           Gradio client (calls the API over HTTP)
+run.sh          one-command launcher (API + UI)
+docs/           architecture & learning-flow diagrams (+ generator script)
+```
 
 ## Data model
 
 A `Task` has:
 
-| Field         | Type                                   | Notes                          |
-|---------------|----------------------------------------|--------------------------------|
-| `id`          | int                                    | primary key, auto-assigned     |
-| `title`       | str                                    | required                       |
-| `description` | str \| null                            | optional                       |
+| Field         | Type                                     | Notes                        |
+|---------------|------------------------------------------|------------------------------|
+| `id`          | int                                      | primary key, auto-assigned   |
+| `title`       | str                                      | required                     |
+| `description` | str \| null                              | optional                     |
 | `status`      | enum: `pending` / `in_progress` / `done` | defaults to `pending`        |
-| `priority`    | enum: `low` / `medium` / `high`        | defaults to `medium`           |
-| `created_at`  | datetime                               | set by the server on create    |
+| `priority`    | enum: `low` / `medium` / `high`          | defaults to `medium`         |
+| `created_at`  | datetime                                 | set by the server on create  |
 
 ## Setup
 
@@ -34,58 +59,77 @@ Requires Python 3.12+.
 python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
-pip install "fastapi[standard]" sqlmodel
+pip install "fastapi[standard]" sqlmodel gradio graphviz
 ```
 
-## Run
+## Run (one command)
 
 ```bash
-source .venv/bin/activate
-uvicorn main:app --reload
-# or: fastapi dev main.py
+./run.sh
 ```
 
-The server starts on http://127.0.0.1:8000 and creates a `tasks.db` SQLite file
-in the project directory on first startup.
+This starts **both** services and stops both on `Ctrl-C`:
 
-- Swagger UI: http://127.0.0.1:8000/docs
+- API + Swagger UI: http://127.0.0.1:8000/docs
+- Gradio UI:        http://127.0.0.1:7860
+
+`tasks.db` is created in the project directory on first startup.
 
 ## Endpoints
 
-| Method | Path              | Description                                        |
-|--------|-------------------|----------------------------------------------------|
-| POST   | `/tasks`          | Create a task                                      |
-| GET    | `/tasks`          | List tasks (optional `?status=` and `?priority=`)  |
-| GET    | `/tasks/{id}`     | Get one task (404 if missing)                      |
-| PUT    | `/tasks/{id}`     | Partial update (send only the fields to change)    |
-| DELETE | `/tasks/{id}`     | Delete a task (204 No Content)                     |
+| Method | Path            | Description                                        |
+|--------|-----------------|----------------------------------------------------|
+| POST   | `/tasks`        | Create a task                                      |
+| GET    | `/tasks`        | List tasks (optional `?status=` and `?priority=`)  |
+| GET    | `/tasks/{id}`   | Get one task (404 if missing)                      |
+| PUT    | `/tasks/{id}`   | Partial update (send only the fields to change)    |
+| DELETE | `/tasks/{id}`   | Delete a task (204 No Content)                     |
 
 ### Examples
 
 ```bash
-# create
 curl -X POST http://127.0.0.1:8000/tasks \
   -H 'Content-Type: application/json' \
   -d '{"title":"Write the API","priority":"high"}'
 
-# list + filter
 curl "http://127.0.0.1:8000/tasks?status=pending&priority=high"
 
-# partial update
 curl -X PUT http://127.0.0.1:8000/tasks/1 \
   -H 'Content-Type: application/json' -d '{"status":"done"}'
 
-# delete
 curl -X DELETE http://127.0.0.1:8000/tasks/1
 ```
 
+## Where are the SQL queries?
+
+There are no hand-written SQL strings — SQLModel/SQLAlchemy **generates** the SQL
+from the ORM calls (`session.add`/`commit`, `select(Task).where(...)`,
+`session.get`, `session.delete`). To **see** the generated SQL, run with
+`SQL_ECHO=1`:
+
+```bash
+SQL_ECHO=1 ./run.sh
+```
+
+Every `INSERT` / `SELECT` / `UPDATE` / `DELETE` statement then prints to the
+console as it runs.
+
 ## Verify the database with DBeaver
 
-1. Install **DBeaver Community Edition** (free).
+1. Install **DBeaver Community Edition** (free — no license needed).
 2. *New Database Connection* → **SQLite** → set the database file to the
    `tasks.db` in this project directory → accept the SQLite driver download →
    *Finish*.
 3. Expand *Tables → task → Data*.
-4. Perform CRUD operations via `/docs`, then **Refresh** (F5) the Data tab to
-   confirm rows are actually created / updated / deleted — don't rely on the
-   HTTP `200` alone.
+4. Create / update / delete tasks from the Gradio UI (or `/docs`), then
+   **Refresh** (F5) the Data tab and confirm rows really change — don't rely on
+   the HTTP `200` alone.
+
+## Learning flow
+
+How this project was built, concept by concept:
+
+![learning flow](docs/learning-flow.svg)
+
+Diagrams are generated by `docs/generate_diagrams.py` (needs `brew install
+graphviz`): `python docs/generate_diagrams.py`.
