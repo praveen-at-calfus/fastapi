@@ -1,0 +1,8 @@
+# Runtime dependencies for the Docker image.
+# (Kept separate from pyproject.toml so `pip install` in the container is simple
+#  and the build can cache this layer. graphviz is dev-only, so it's excluded.)
+
+fastapi[standard]>=0.128.0   # web framework; [standard] pulls in uvicorn + httpx
+sqlmodel>=0.0.39             # ORM (SQLAlchemy + Pydantic) used by the API
+psycopg2-binary>=2.9         # PostgreSQL driver — needed to talk to the db container
+gradio>=5.0                  # the UI service imports this

@@ -1,0 +1,31 @@
+# Anything listed here is NOT sent to the Docker daemon when building an image.
+# Smaller build context = faster builds, smaller images, no secrets baked in.
+
+# Python cruft
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Local virtualenv — the image installs its own deps, we never copy this in
+.venv/
+venv/
+
+# Local SQLite DB — the container uses Postgres; never ship local data
+*.db
+
+# Secrets and local env
+.env
+
+# Git internals — not needed at runtime
+.git/
+.gitignore
+
+# Docs / diagrams / notes — not needed to run the app
+docs/
+*.md
+FastAPI_Tutorial_Notes.md
+
+# Editor / OS files
+.DS_Store
+.claude/

@@ -1,0 +1,76 @@
+# docker-compose.yml — defines the whole multi-container stack.
+# Bring it all up with:   docker compose up --build
+# (Compose auto-reads the .env file in this directory for ${...} values.)
+
+services:
+  # ---------------------------------------------------------------------------
+  # db — PostgreSQL. Uses the official image (we don't build this one).
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:16
+    environment:
+      # On first startup, the official image creates this user/password/db.
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      # Publish Postgres to the host so DBeaver can connect at localhost:5432.
+      # host:container — only the host side is configurable; 5432 is fixed inside.
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      # Named volume -> Postgres data lives OUTSIDE the container, so it
+      # survives `docker compose down` and rebuilds. This is DB persistence.
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # Compose marks the service "healthy" only once Postgres accepts
+      # connections. Other services can then wait for this (see api.depends_on).
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # api — the FastAPI app. Built from our Dockerfile.
+  # ---------------------------------------------------------------------------
+  api:
+    build: .                       # build the image from ./Dockerfile
+    image: task-tracker-api:latest # tag it (ui reuses this exact image)
+    environment:
+      # Note the host is `db`, NOT localhost: Compose's built-in DNS resolves
+      # the service name `db` to the Postgres container on the shared network.
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        # Don't start the API until Postgres reports healthy (stretch goal):
+        # avoids the API crashing on boot because the DB isn't ready yet.
+        condition: service_healthy
+    healthcheck:
+      # No curl in the slim image, so we probe with Python's stdlib.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # ---------------------------------------------------------------------------
+  # ui — the Gradio client. Same image as api, different start command.
+  # ---------------------------------------------------------------------------
+  ui:
+    image: task-tracker-api:latest # reuse the image api built (no rebuild)
+    command: ["python", "ui.py"]   # override the default CMD (uvicorn)
+    environment:
+      # Reach the API by its service name over the shared network.
+      API_URL: http://api:8000
+      # Make Gradio bind to all interfaces so the host can reach port 7860.
+      GRADIO_SERVER_NAME: 0.0.0.0
+    ports:
+      - "7860:7860"
+    depends_on:
+      api:
+        condition: service_healthy
+
+# Declares the named volume used by db above. Docker manages its storage.
+volumes:
+  pgdata:
