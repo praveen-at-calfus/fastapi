@@ -217,9 +217,15 @@ writes really land in it.
 
 1. Make sure the stack is running (`docker compose up`).
 2. *New Database Connection* → **PostgreSQL**.
-3. Host `localhost`, Port `5432`, Database `tasks`, Username `taskuser`,
-   Password `taskpass` (your `.env` values) → *Finish*.
+3. Host `localhost`, Port = your `POSTGRES_PORT` (default `5432`), Database
+   `tasks`, Username `taskuser`, Password `taskpass` (your `.env` values) →
+   *Finish*.
 4. Expand *Databases → tasks → Schemas → public → Tables → task → Data*.
+
+> **Port already in use?** If you have a native Postgres running on your machine
+> it will occupy host port `5432` and shadow the container (you'll see
+> `FATAL: role "taskuser" does not exist`). Set `POSTGRES_PORT=5433` in `.env`,
+> run `docker compose up -d`, and connect DBeaver to port `5433` instead.
 
 **Local (SQLite):**
 
