@@ -26,6 +26,8 @@ class TaskUpdate(SQLModel):
     description: str | None = None
     status: Status | None = None
     priority: Priority | None = None
+    doubt: str | None = None      # doer asks
+    answer: str | None = None     # giver answers
 
 
 class TaskResponse(SQLModel):
@@ -35,4 +37,6 @@ class TaskResponse(SQLModel):
     description: str | None
     status: Status
     priority: Priority
+    doubt: str | None
+    answer: str | None
     created_at: datetime

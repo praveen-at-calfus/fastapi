@@ -29,5 +29,8 @@ class Task(SQLModel, table=True):
     description: str | None = None
     status: Status = Field(default=Status.pending)
     priority: Priority = Field(default=Priority.medium)
+    # The task doer raises a question here; the task giver fills in the answer.
+    doubt: str | None = None
+    answer: str | None = None
     # default_factory runs at insert time, so each row gets its own timestamp.
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
